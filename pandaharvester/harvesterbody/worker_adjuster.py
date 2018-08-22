@@ -80,6 +80,11 @@ class WorkerAdjuster:
                     nRunning = tmpVal['nRunning']
                     nQueueLimit = queueConfig.nQueueLimitWorker
                     maxWorkers = queueConfig.maxWorkers
+                    if hasattr(queueConfig, 'maxStaticWorkers'):
+                        maxStaticWorkers = queueConfig.maxStaticWorkers
+                    else:
+                        maxStaticWorkers = maxWorkers
+
                     if queueConfig.runMode == 'slave':
                         nNewWorkersDef = tmpVal['nNewWorkers']
                         if nNewWorkersDef == 0:
@@ -126,8 +131,12 @@ class WorkerAdjuster:
                         nNewWorkers = max(maxQueuedWorkers - nQueue, 0)
                         tmpLog.debug('setting nNewWorkers to {0} in maxQueuedWorkers calculation'
                                      .format(nNewWorkers))
-                        if maxWorkers > 0:
-                            nNewWorkers = min(nNewWorkers, max(maxWorkers - nQueue - nReady - nRunning, 0))
+                        if maxWorkers > 0 and nNewWorkers > 0:
+                            resource = self.get_dynamic_worker(queueConfig, queueName, resource_type)
+                            if resource and 'nNewWorkers' in resource:
+                                nNewWorkers = min(nNewWorkers, max(maxStaticWorkers - nQueue - nReady - nRunning, resource['nNewWorkers']))
+                            else:
+                                nNewWorkers = min(nNewWorkers, max(maxStaticWorkers - nQueue - nReady - nRunning, 0))
                             tmpLog.debug('setting nNewWorkers to {0} to respect maxWorkers'
                                          .format(nNewWorkers))
                     if queueConfig.maxNewWorkersPerCycle > 0:
@@ -142,3 +151,15 @@ class WorkerAdjuster:
             # dump error
             errMsg = core_utils.dump_error_message(tmpLog)
             return None
+
+    def get_dynamic_worker(self, queueConfig, queue_name, resource_type):
+        tmpLog = core_utils.make_logger(_logger, 'queue={0}'.format(queue_name), method_name='get_dynamic_worker')
+        # get plugin for worker adjuster
+        adjuster = self.pluginFactory.get_plugin(queueConfig.adjuster)
+        if adjuster is None:
+            tmpLog.info('no adjuster plugin for {0} not found'.format(queue_name))
+            return None
+
+        resource = adjuster.get_dynamic_resource(queue_name, resource_type)
+        tmpLog.info('Dynamic available reource for queue %s(resource: %s): %s' % (queue_name, resource_type, resource))
+        return resource
