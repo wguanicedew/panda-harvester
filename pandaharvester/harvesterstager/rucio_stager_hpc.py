@@ -18,10 +18,6 @@ class RucioStagerHPC(BaseStager):
         BaseStager.__init__(self, **kwarg)
         if not hasattr(self, 'scopeForTmp'):
             self.scopeForTmp = 'panda'
-        if not hasattr(self, 'pathConvention'):
-            self.pathConvention = None
-        if not hasattr(self, 'objstoreID'):
-            self.objstoreID = None
 
     # check status
     def check_status(self, jobspec):
@@ -44,14 +40,11 @@ class RucioStagerHPC(BaseStager):
         zip_datasetName = 'harvester_stage_out.{0}'.format(str(uuid.uuid4()))
         fileAttrs = jobspec.get_output_file_attributes()
         for fileSpec in jobspec.outFiles:
-            # fileSpec.fileAttributes['transferID'] = None #synchronius transfer
+            fileSpec.fileAttributes['transferID'] = None #synchronius transfer
             # skip already done
             tmpLog.debug(' file: %s status: %s' % (fileSpec.lfn,fileSpec.status))                                                                                                                                             
             if fileSpec.status in ['finished', 'failed']:
                 continue
-
-            fileSpec.pathConvention = self.pathConvention
-            fileSpec.objstoreID = self.objstoreID
             # set destination RSE
             if fileSpec.fileType in ['es_output', 'zip_output', 'output']:
                 dstRSE = self.dstRSE_Out
@@ -80,12 +73,12 @@ class RucioStagerHPC(BaseStager):
             executable = ['/usr/bin/env',
                           'rucio', '-v', 'upload']
             executable += [ '--no-register' ]
-            #executable += [ '--lifetime',('%d' %lifetime)]
+            executable += [ '--lifetime',('%d' %lifetime)]
             executable += [ '--rse',dstRSE]
             executable += [ '--scope',scope]
-            #if fileSpec.fileAttributes is not None and 'guid' in fileSpec.fileAttributes:
-            #    executable += [ '--guid',fileSpec.fileAttributes['guid']]
-            #executable += [('%s:%s' %(scope,datasetName))]
+            if fileSpec.fileAttributes is not None and 'guid' in fileSpec.fileAttributes:
+                executable += [ '--guid',fileSpec.fileAttributes['guid']]
+            executable += [('%s:%s' %(scope,datasetName))]
             executable += [('%s' %fileSpec.path)]
 
             #print executable 
