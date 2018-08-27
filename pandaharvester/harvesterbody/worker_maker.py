@@ -14,7 +14,7 @@ class WorkerMaker:
         self.dbProxy = DBProxy()
 
     # make workers
-    def make_workers(self, jobchunk_list, queue_config, n_ready, resource_type):
+    def make_workers(self, jobchunk_list, queue_config, n_ready, resource_type, dyn_resources=None):
         tmpLog = core_utils.make_logger(_logger, 'queue={0}'.format(queue_config.queueName),
                                         method_name='make_workers')
         tmpLog.debug('start')
@@ -31,9 +31,13 @@ class WorkerMaker:
             okChunks = []
             ngChunks = []
             for iChunk, jobChunk in enumerate(jobchunk_list):
+                # get dynamic resources
+                dyn_resource = None
+                if iChunk < len(dyn_resources):
+                    dyn_resource = dyn_resources[iChunk]
                 # make a worker
                 if iChunk >= n_ready:
-                    workSpec = maker.make_worker(jobChunk, queue_config, resource_type)
+                    workSpec = maker.make_worker(jobChunk, queue_config, resource_type, dyn_resource)
                 else:
                     # use ready worker
                     if iChunk < len(readyWorkers):
@@ -49,6 +53,8 @@ class WorkerMaker:
                     workSpec.workerID = self.dbProxy.get_next_seq_number('SEQ_workerID')
                     workSpec.configID = queue_config.configID
                     workSpec.isNew = True
+                if dyn_resource:
+                    workSpec.set_dyn_resource(dyn_resource)
                 okChunks.append((workSpec, jobChunk))
             # dump
             tmpLog.debug('made {0} workers while {1} chunks failed'.format(len(okChunks),

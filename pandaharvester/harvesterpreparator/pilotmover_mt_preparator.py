@@ -2,7 +2,6 @@ import os.path
 import os
 import threading
 import time
-import zlib
 from future.utils import iteritems
 
 from pandaharvester.harvestercore import core_utils
@@ -20,9 +19,8 @@ baseLogger = core_utils.setup_logger('pilotmover_mt_preparator')
 
 class PilotmoverMTPreparator(PluginBase):
     """
-    Praparator bring files from remote ATLAS/Rucio storage to local facility. 
+    Praparator bring files from remote ATLAS/Rucio storage to local facility.
     """
-
 
     # constructor
     def __init__(self, **kwarg):
@@ -35,23 +33,6 @@ class PilotmoverMTPreparator(PluginBase):
     def check_status(self, jobspec):
         return True, ''
 
-
-    def calculate_adler32_checksum(self, filename):
-        asum = 1  # default adler32 starting value
-        blocksize = 64 * 1024 * 1024  # read buffer size, 64 Mb
-
-        with open(filename, 'rb') as f:
-            while True:
-                data = f.read(blocksize)
-                if not data:
-                    break
-                asum = zlib.adler32(data, asum)
-                if asum < 0:
-                    asum += 2**32
-
-        # convert to hex
-        return "{0:08x}".format(asum)
-
     def stage_in(self, tmpLog, jobspec, files):
         tmpLog.debug('To stagein files[] {0}'.format(files))
         data_client = data.StageInClient(site=jobspec.computingSite)
@@ -60,7 +41,7 @@ class PilotmoverMTPreparator(PluginBase):
         if len(files) > 0:
             result = data_client.transfer(files)
             tmpLog.debug('pilot.api data.StageInClient.transfer(files) result: {0}'.format(result))
-        
+
             # loop over each file check result all must be true for entire result to be true
             if result:
                 for answer in result:
@@ -81,8 +62,8 @@ class PilotmoverMTPreparator(PluginBase):
         # make logger
         tmpLog = self.make_logger(baseLogger, 'PandaID={0}'.format(jobspec.PandaID),
                                   method_name='trigger_preparation')
-        tmpLog.debug('start')        
-       
+        tmpLog.debug('start')
+
         # check that jobspec.computingSite is defined
         if jobspec.computingSite is None:
             # not found
@@ -98,7 +79,7 @@ class PilotmoverMTPreparator(PluginBase):
             inFile['path'] = mover_utils.construct_file_path(self.basePath, inFile['scope'], inLFN)
             tmpLog.debug('To check file: %s' % inFile)
             if os.path.exists(inFile['path']):
-                checksum = self.calculate_adler32_checksum(inFile['path'])
+                checksum = core_utils.calc_adler32(inFile['path'])
                 checksum = 'ad:%s' % checksum
                 tmpLog.debug('checksum for file %s is %s' % (inFile['path'], checksum))
                 if 'checksum' in inFile and inFile['checksum'] and inFile['checksum'] == checksum:
@@ -117,7 +98,7 @@ class PilotmoverMTPreparator(PluginBase):
         ErrMsg = 'These files failed to download : '
         if files:
             threads = []
-            n_files_per_thread = (len(files)+ self.n_threads - 1)/self.n_threads
+            n_files_per_thread = (len(files) + self.n_threads - 1) / self.n_threads
             tmpLog.debug('num files per thread: %s' % n_files_per_thread)
             for i in range(0, len(files), n_files_per_thread):
                 sub_files = files[i:i + n_files_per_thread]

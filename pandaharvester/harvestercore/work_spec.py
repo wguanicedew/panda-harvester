@@ -99,6 +99,7 @@ class WorkSpec(SpecBase):
         object.__setattr__(self, 'pandaid_list', None)
         object.__setattr__(self, 'new_status', False)
         object.__setattr__(self, 'pilot_closed', False)
+        object.__setattr__(self, 'dyn_resource', None)
 
     # keep state for pickle
     def __getstate__(self):
@@ -357,3 +358,20 @@ class WorkSpec(SpecBase):
     # set pilot_closed
     def set_pilot_closed(self):
         self.pilot_closed = True
+
+    # get num of remaining events
+    def get_num_remaining_events(self):
+        nRemainingEvents = 0
+        if self.jobspec_list:
+            for jobspec in self.jobspec_list:
+                if jobspec.nRemainingEvents:
+                    nRemainingEvents += jobspec.nRemainingEvents
+        return nRemainingEvents
+
+    # set dynamic resources
+    def set_dyn_resource(self, dyn_resource):
+        self.dyn_resource = dyn_resource
+
+    # get dynamic resources
+    def get_dyn_resource(self):
+        return self.dyn_resource

@@ -97,6 +97,7 @@ class WorkerAdjuster:
 
                     # define num of new workers based on static site config
                     nNewWorkers = 0
+                    dyn_resources = None
                     if nQueue >= nQueueLimit > 0:
                         # enough queued workers
                         retMsg = 'No nNewWorkers since nQueue({0})>=nQueueLimit({1})'.format(nQueue, nQueueLimit)
@@ -133,6 +134,8 @@ class WorkerAdjuster:
                                      .format(nNewWorkers))
                         if maxWorkers > 0 and nNewWorkers > 0:
                             resource = self.get_dynamic_worker(queueConfig, queueName, resource_type)
+                            if resource and 'resources' in resource:
+                                dyn_resources = resource['resources']
                             if resource and 'nNewWorkers' in resource:
                                 nNewWorkers = min(nNewWorkers, max(maxStaticWorkers - nQueue - nReady - nRunning, resource['nNewWorkers']))
                             else:
@@ -144,6 +147,8 @@ class WorkerAdjuster:
                         tmpLog.debug('setting nNewWorkers to {0} in order to respect maxNewWorkersPerCycle'
                                      .format(nNewWorkers))
                     dyn_num_workers[queueName][resource_type]['nNewWorkers'] = nNewWorkers
+                    if nNewWorkers > 0 and dyn_resources:
+                        dyn_num_workers[queueName][resource_type]['dyn_resources'] = dyn_resources
             # dump
             tmpLog.debug('defined {0}'.format(str(dyn_num_workers)))
             return dyn_num_workers

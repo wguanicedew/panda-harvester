@@ -7,31 +7,59 @@ except:
 
 from pandaharvester.harvestercore import core_utils
 from pandaharvester.harvestercore.plugin_base import PluginBase
+from pandaharvester.harvesterworkeradjuster.pbs_bf_worker_adjuster import PBSBackfillWorkerAdjuster
 
 # logger
 baseLogger = core_utils.setup_logger('pbs_bf_submitter')
 
 
-# submitter for PBS batch system
-class PBSSubmitter(PluginBase):
+# backfill submitter for PBS batch system
+class PBSBackfillSubmitter(PBSBackfillWorkerAdjuster):
     # constructor
     def __init__(self, **kwarg):
         self.uploadLog = False
         self.logBaseURL = None
         self.nodesToDecrease = 0
         self.durationSecondsToDecrease = 0
-        PluginBase.__init__(self, **kwarg)
+        super(PBSBackfillSubmitter, self).__init__(self, **kwarg)
         # template for batch script
         tmpFile = open(self.templateFile)
         self.template = tmpFile.read()
         tmpFile.close()
-        if not hasattr(self, 'maxDurationSeconds'):
-            self.maxDurationSeconds = self.defaultDurationSeconds
 
     # adjust cores based on available events
-    def adjust_needed_resource(self, workspec):
-        # TODO
-        return workspec.nCore
+    def get_needed_resource(self, workspec):
+        tmpLog = self.make_logger(baseLogger, 'workerID={0}'.format(workSpec.workerID),
+                                      method_name='get_needed_resource')
+        if not hasattr(self, 'nSecondsPerEvent') or self.nSecondsPerEvent < 100:
+            tmpLog.warn("nSecondsPerEvent is not set, will use default value 480 seconds(8 minutes)")
+            nSecondsPerEvent = 480
+        else:
+            nSecondsPerEvent = self.nSecondsPerEvent
+
+        nRemainingEvents = workspec.get_num_remaining_events()
+        if nRemainingEvents <= 0:
+            tmpLog.warn("Maybe nRemainingEvents is not correctly propagated or delayed, will not submit big jobs")
+
+        resource = self.get_max_bf_resources(workspec)
+        if resource:
+            tmpLog.debug("Selected resources: %s" % resource)
+            duration = resource['duration']
+            if resource['nodes'] < self.defaultNodes:
+                workspec.nCore = resource['nodes'] * self.nCorePerNode
+            else:
+                if nRemainingEvents <= 0:
+                    tmpLog.warn("nRemainingEvents is not correctly propagated or delayed, will not submit big jobs, shrink number of nodes to default")
+                    workspec.nCore = self.defaultNodes * self.nCorePerNode
+                else:
+                    neededNodes = nRemainingEvents * nSecondsPerEvent * 1.0 / resource['duration'] / self.nCorePerNode
+                    neededNodes = int(math.ceil(neededNodes))
+                    workspec.nCore = neededNodes * self.nCorePerNode
+        else:
+            workspec.nCore = self.defaultNodes * self.nCorePerNode
+            duration = self.defaultDurationSeconds
+
+        return workspec, duration
     
     # submit workers
     def submit_workers(self, workspec_list):
@@ -40,8 +68,11 @@ class PBSSubmitter(PluginBase):
             # make logger
             tmpLog = self.make_logger(baseLogger, 'workerID={0}'.format(workSpec.workerID),
                                       method_name='submit_workers')
+
+            workspec, duration = self.get_needed_resource(workSpec)
+            
             # make batch script
-            batchFile = self.make_batch_script(workSpec)
+            batchFile = self.make_batch_script(workSpec, duration)
             # command
             comStr = "qsub {0}".format(batchFile)
             # submit
@@ -79,21 +110,11 @@ class PBSSubmitter(PluginBase):
         return retList
 
     # make batch script
-    def make_batch_script(self, workspec):
+    def make_batch_script(self, workspec, duration):
         # make logger
         tmpLog = self.make_logger(baseLogger, 'workerID={0}'.format(workspec.workerID),
                                   method_name='make_batch_script')
 
-        resource = self.get_max_bf_resources(workspec)
-        if resource:
-            tmpLog.debug("Selected resources: %s" % resource)
-            workspec.nCore = (resource['nodes'] - self.nodesToDecrease) * self.nCorePerNode
-            duration = resource['duration'] - self.durationSecondsToDecrease
-        else:
-            workspec.nCore = self.nCore
-            duration = self.defaultDurationSeconds
-
-        workspec.nCore = self.adjust_needed_resource(workspec)
         duration = str(datetime.timedelta(seconds=duration))
         tmpFile = tempfile.NamedTemporaryFile(delete=False, suffix='_submit.sh', dir=workspec.get_access_point())
         tmpFile.write(self.template.format(nCorePerNode=self.nCorePerNode,
@@ -122,64 +143,10 @@ class PBSSubmitter(PluginBase):
                     stdErr = items[-1].replace('$PBS_JOBID', batch_id)
         return stdOut, stdErr
 
-    # get backfill resources
-    def get_bf_resources(self, workspec):
-        # make logger
-        tmpLog = self.make_logger(baseLogger, 'workerID={0}'.format(workspec.workerID),
-                                  method_name='get_bf_resources')
-
-        resources = {}
-        # command
-        comStr = "showbf -p {0} --blocking".format(self.partition)
-        # get backfill resources
-        tmpLog.debug('Get backfill resources with {0}'.format(comStr))
-        p = subprocess.Popen(comStr.split(),
-                             shell=False,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        # check return code
-        stdOut, stdErr = p.communicate()
-        retCode = p.returncode
-        tmpLog.debug('retCode={0}'.format(retCode))
-        if retCode == 0:
-            # extract batchID
-            tmpLog.debug("Available backfill resources for partition(%s):\n%s" % (self.partition, stdOut))
-            lines = stdOut.splitlines()
-            for line in lines:
-                line = line.strip()
-                if line.startswith(self.partition):
-                    try:
-                        items = line.split()
-                        nodes = int(items[2])
-                        if nodes < self.minNodes:
-                            continue
-                        duration = items[3]
-                        if duration == 'INFINITY':
-                            duration = self.maxDurationSeconds
-                        else:
-                            h, m, s = duration.split(':')
-                            duration = int(h) * 3600 + int(m) * 60 + int(s)
-                            if duration < self.minDurationSeconds:
-                                continue
-                            if duration > self.maxDurationSeconds:
-                                duration = self.maxDurationSeconds
-                        key = nodes * duration
-                        if key not in resources:
-                            resources[key] = []
-                        resources[key].append({'nodes': nodes, 'duration': duration})
-                    except:
-                        tmpLog.error("Failed to parse line: %s" % line)
-
-        else:
-            # failed
-            errStr = stdOut + ' ' + stdErr
-            tmpLog.error(errStr)
-        tmpLog.info("Available backfill resources: %s" % resources)
-        return resources
-
     def get_max_bf_resources(self, workspec):
-        resources = self.get_bf_resources(workspec)
+        resources = self.get_bf_resources(workspec, blocking=True)
         if resources:
-            max_capacity = max(resources.keys())
-            return resources[max_capacity][0]
+            resources = self.adjust_resources(resources)
+            if resources:
+                return resources[0]
         return None

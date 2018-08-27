@@ -40,7 +40,7 @@ class SimpleWorkerMaker(PluginBase):
         return job_corecount, job_memory
 
     # make a worker from jobs
-    def make_worker(self, jobspec_list, queue_config, resource_type):
+    def make_worker(self, jobspec_list, queue_config, resource_type, dyn_resource):
         tmpLog = self.make_logger(_logger, 'queue={0}'.format(queue_config.queueName),
                                   method_name='make_worker')
 
@@ -93,7 +93,7 @@ class SimpleWorkerMaker(PluginBase):
             maxWalltime = 0
             for jobSpec in jobspec_list:
 
-                job_corecount, job_memory  = self.get_job_core_and_memory(queue_dict, jobSpec)
+                job_corecount, job_memory = self.get_job_core_and_memory(queue_dict, jobSpec)
                 nCore += job_corecount
                 minRamCount += job_memory
 
@@ -113,10 +113,10 @@ class SimpleWorkerMaker(PluginBase):
                 except Exception:
                     pass
             if (nCore > 0 and 'nCore' in self.jobAttributesToUse) \
-                or unified_queue:
+               or unified_queue:
                 workSpec.nCore = nCore
             if (minRamCount > 0 and 'minRamCount' in self.jobAttributesToUse) \
-                or unified_queue:
+               or unified_queue:
                 workSpec.minRamCount = minRamCount
             if maxDiskCount > 0 and 'maxDiskCount' in self.jobAttributesToUse:
                 workSpec.maxDiskCount = maxDiskCount
@@ -130,7 +130,6 @@ class SimpleWorkerMaker(PluginBase):
             workSpec.resourceType = 'SCORE'
         else:
             workSpec.resourceType = 'MCORE'
-
 
         return workSpec
 
