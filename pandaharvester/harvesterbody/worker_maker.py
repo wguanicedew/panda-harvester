@@ -33,7 +33,7 @@ class WorkerMaker:
             for iChunk, jobChunk in enumerate(jobchunk_list):
                 # get dynamic resources
                 dyn_resource = None
-                if iChunk < len(dyn_resources):
+                if dyn_resources and iChunk < len(dyn_resources):
                     dyn_resource = dyn_resources[iChunk]
                 # make a worker
                 if iChunk >= n_ready:
