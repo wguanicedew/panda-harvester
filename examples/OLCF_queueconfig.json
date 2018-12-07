@@ -1,0 +1,106 @@
+{
+	"Titan_Harvester_MCORE_ES":{
+		"prodSourceLabel":"managed",
+		"nQueueLimitJob":6,
+		"nQueueLimitWorker":6,
+		"maxWorkers":4,
+                "maxStaticWorkers": 0,
+		"mapType":"OneToMany",
+		"useJobLateBinding":false,
+		"walltimeLimit":7140,
+                "zipPerMB":1024,
+		"preparator":{
+			"name":"PilotmoverMTPreparator",
+			"module":"pandaharvester.harvesterpreparator.pilotmover_mt_preparator",
+                        "n_threads": 3,
+			"basePath":"/lustre/atlas/proj-shared/csc108/eventservice/harvester/harvester-wguan/workdir/harvester-preparator"
+			},
+		"submitter":{
+			"name":"PBSSubmitter",
+			"module":"pandaharvester.harvestersubmitter.pbs_submitter",
+			"nCorePerNode": 16,
+			"templateFile": "/lustre/atlas/proj-shared/csc108/eventservice/harvester/harvester-wguan/templates/submit_olcf_es_singularity.sh",
+			"localQueue": "killable",
+			"projectName": "csc108",
+                        "partition": "titan",
+			"nCore": 800,
+                        "maxWalltime": 7000,
+                        "dynamicSizing": true,
+                        "minSubmissionInterval": 60
+			},
+		"workerMaker":{
+			"name":"SimpleBackfillESWorkerMaker",
+			"module":"pandaharvester.harvesterworkermaker.simple_bf_es_worker_maker",
+                        "nWorkersPerJob": 4,
+                        "workDir":"/lustre/atlas/proj-shared/csc108/eventservice/harvester/harvester-wguan/workdir/harvester-worker-maker/${workerID}",
+                        "partition": "titan",
+                        "minNodes": 20,
+                        "staticWorkers": 0,
+                        "defaultNodes": 50,
+                        "maxNodes": 200,
+                        "nCorePerNode": 16,
+                        "defaultWalltimeSeconds": 7000,
+                        "dynamicSizing": true,
+                        "nSecondsPerEvent": 900,
+                        "maxWorkersPerJobInTotal": 5,
+                        "adjusters": [{"minNodes": 1,
+                                       "maxNodes": 2,
+                                       "minWalltimeSeconds": 1200,
+                                       "maxWalltimeSeconds": 1800,
+                                       "nodesToDecrease": 5,
+                                       "walltimeSecondsToDecrease": 120},
+                                      {"minNodes": 3,
+                                       "maxNodes": 125,
+                                       "minWalltimeSeconds": 1800,
+                                       "maxWalltimeSeconds": 7200,
+                                       "nodesToDecrease": 5,
+                                       "walltimeSecondsToDecrease": 120},
+                                      {"minNodes": 126,
+                                       "maxNodes": 312,
+                                       "minWalltimeSeconds": 1800,
+                                       "maxWalltimeSeconds": 21600,
+                                       "nodesToDecrease": 10,
+                                       "walltimeSecondsToDecrease": 120},
+                                      {"minNodes": 313,
+                                       "maxNodes": 3749,
+                                       "minWalltimeSeconds": 1800,
+                                       "maxWalltimeSeconds": 43200,
+                                       "nodesToDecrease": 20,
+                                       "walltimeSecondsToDecrease": 120}]
+			},
+		"messenger":{
+			"name":"SharedFileMessenger",
+			"module":"pandaharvester.harvestermessenger.shared_file_messenger",
+			"accessPoint":"/lustre/atlas/proj-shared/csc108/eventservice/harvester/harvester-wguan/workdir/harvester-messenger/${workerID}"
+			},
+		"stager":{
+			"name":"RucioStagerHPC",
+			"module":"pandaharvester.harvesterstager.rucio_stager_hpc",
+			"dstRSE_Out":"CERN-PROD_ES",
+			"dstRSE_Log":"BNL-OSG2_DATADISK",
+			"zipDir":"${WORKDIR}",
+                        "scopeForTmp": "transient",
+                        "objstoreID": 1381,
+                        "pathConvention": 1000,
+                        "objectstore_additions":{
+                                                 "CERN-PROD_ES": {
+                                                                  "storage_id": 9550,
+                                                                  "access_key": "MustBeSet",
+                                                                  "secret_key": "MustBeSet",
+                                                                  "is_secure": true,
+                                                                  "pfn_prefix": "s3://s3.cern.ch:443//atlas-eventservice"
+                                                                  }
+                                               }
+			},
+		"monitor":{
+			"name":"PBSMonitor",
+			"module":"pandaharvester.harvestermonitor.pbs_monitor",
+			"adaptor": "torque://localhost"
+			},
+		"sweeper":{
+			"name":"PBSSweeper",
+			"module":"pandaharvester.harvestersweeper.pbs_sweeper",
+			"adaptor": "torque://localhost"
+			}
+	}
+}
